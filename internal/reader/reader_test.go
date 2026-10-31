@@ -102,7 +102,7 @@ func TestPlayPauseAndSentences(t *testing.T) {
 	for range 50 {
 		m.Update(key("k"))
 	}
-	if m.wpm != maxWPM {
+	if m.wpm != MaxWPM {
 		t.Fatalf("max: %d", m.wpm)
 	}
 	// Played to the end it stops, and space starts again.
@@ -184,5 +184,91 @@ func TestBigLetters(t *testing.T) {
 	m.width = 20
 	if !strings.Contains(m.View(), "Wort") {
 		t.Fatalf("narrow:\n%s", m.View())
+	}
+}
+
+func TestSeekGoesToTheStartOfTheSentence(t *testing.T) {
+	m := New("One two three. Four five six. Seven.", Settings{WPM: 300}, nil)
+	m.Seek(4)
+	if m.chunks[m.i].word != "Four" {
+		t.Fatalf("seek into a sentence: %q", m.chunks[m.i].word)
+	}
+	m.Seek(1000)
+	if m.chunks[m.i].word != "Seven." {
+		t.Fatalf("seek past the end: %q", m.chunks[m.i].word)
+	}
+	if i, done := m.Position(); i != 6 || !done {
+		t.Fatalf("position at the end: %d %v", i, done)
+	}
+	m.Seek(0)
+	if i, done := m.Position(); i != 6 || !done {
+		t.Fatal("seek 0 is a fresh start and leaves the reader alone")
+	}
+	b := New("Before.\n\n```\ncode\n```\n\nAfter.", Settings{WPM: 300}, nil)
+	b.Seek(1)
+	if !b.paused || b.chunks[b.i].block == "" {
+		t.Fatal("seek onto a block waits for space")
+	}
+	if i, done := New("", Settings{}, nil).Position(); i != 0 || !done {
+		t.Fatal("an empty text is done")
+	}
+}
+
+func TestPauseShowsTheSentence(t *testing.T) {
+	m := New("First one here. The second sentence is long enough to wrap around a narrow screen width. Last.", Settings{WPM: 300}, nil)
+	m.width, m.height = 40, 14
+	m.Seek(5)
+	m.Update(tickMsg{gen: m.gen})
+	if strings.Contains(m.View(), "enough") {
+		t.Fatal("the sentence shows while playing")
+	}
+	m.Update(key(" "))
+	v := m.View()
+	for _, w := range []string{"The", "second", "narrow"} {
+		if !strings.Contains(v, w) {
+			t.Fatalf("paused view lacks %q:\n%s", w, v)
+		}
+	}
+	if strings.Contains(v, "First") || strings.Contains(v, "Last.") {
+		t.Fatalf("other sentences shown:\n%s", v)
+	}
+	for _, l := range m.context(20, 2) {
+		if n := len([]rune(stripANSI(l))); n > 20 {
+			t.Fatalf("line of %d runes: %q", n, l)
+		}
+	}
+	if got := len(m.context(20, 2)); got != 2 {
+		t.Fatalf("%d lines, want 2", got)
+	}
+}
+
+func stripANSI(s string) string {
+	var b strings.Builder
+	esc := false
+	for _, r := range s {
+		switch {
+		case r == '\x1b':
+			esc = true
+		case esc && (r >= 'a' && r <= 'z' || r >= 'A' && r <= 'Z'):
+			esc = false
+		case !esc:
+			b.WriteRune(r)
+		}
+	}
+	return b.String()
+}
+
+func TestKeysArrivingTogether(t *testing.T) {
+	m := New("One two three.", Settings{WPM: 300}, nil)
+	m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("kkk")})
+	if m.wpm != 375 {
+		t.Fatalf("kkk: %d", m.wpm)
+	}
+	m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("kkk"), Paste: true})
+	if m.wpm != 375 {
+		t.Fatal("a paste is not keys")
+	}
+	if _, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("jq")}); cmd == nil || m.wpm != 350 {
+		t.Fatal("jq: slower, then quit")
 	}
 }

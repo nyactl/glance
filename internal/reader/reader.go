@@ -17,9 +17,10 @@ import (
 const (
 	// DefaultWPM is the speed until the user picks another.
 	DefaultWPM = 350
-	minWPM     = 100
-	maxWPM     = 1000
-	stepWPM    = 25
+	// MinWPM and MaxWPM bound the speed.
+	MinWPM  = 100
+	MaxWPM  = 1000
+	stepWPM = 25
 )
 
 // chunk is a word, or a block shown whole.
@@ -139,12 +140,29 @@ type Model struct {
 // New makes a reader for text with the settings of last time; save keeps them when they change.
 func New(text string, s Settings, save func(Settings)) *Model {
 	wpm := s.WPM
-	if wpm < minWPM || wpm > maxWPM {
+	if wpm < MinWPM || wpm > MaxWPM {
 		wpm = DefaultWPM
 	}
 	m := &Model{chunks: split(text), wpm: wpm, big: s.Big, save: save, width: 80, height: 12}
 	m.paused = len(m.chunks) == 0 || m.chunks[0].block != ""
 	return m
+}
+
+// Seek moves to word i, to the start of its sentence so the reader does not land mid-thought.
+func (m *Model) Seek(i int) {
+	if i <= 0 || len(m.chunks) == 0 {
+		return
+	}
+	m.i = min(i, len(m.chunks)-1)
+	for m.i > 0 && !m.chunks[m.i].start {
+		m.i--
+	}
+	m.paused = m.paused || m.chunks[m.i].block != ""
+}
+
+// Position is the word reached, and whether the text was read to its end.
+func (m *Model) Position() (i int, done bool) {
+	return m.i, len(m.chunks) == 0 || m.i == len(m.chunks)-1
 }
 
 func (m *Model) Init() tea.Cmd {
@@ -189,6 +207,15 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		return m, m.restart()
 	case tea.KeyMsg:
+		// Keys typed fast, or held down, can arrive in one read as several runes.
+		if msg.Type == tea.KeyRunes && len(msg.Runes) > 1 && !msg.Paste {
+			var cmds []tea.Cmd
+			for _, r := range msg.Runes {
+				_, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{r}})
+				cmds = append(cmds, cmd)
+			}
+			return m, tea.Batch(cmds...)
+		}
 		switch msg.String() {
 		case "q", "esc", "ctrl+c":
 			return m, tea.Quit
@@ -220,7 +247,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 }
 
 func (m *Model) setWPM(wpm int) {
-	m.wpm = min(max(wpm, minWPM), maxWPM)
+	m.wpm = min(max(wpm, MinWPM), MaxWPM)
 	m.keep()
 }
 
@@ -314,7 +341,46 @@ func (m *Model) sentence(dir int) int {
 var (
 	focusStyle = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("1"))
 	dimStyle   = lipgloss.NewStyle().Faint(true)
+	boldStyle  = lipgloss.NewStyle().Bold(true)
 )
+
+// context is the sentence around the current word, wrapped to width with the word in bold, so a
+// pause shows where the reader is. It keeps to lines lines, around the word.
+func (m *Model) context(width, lines int) []string {
+	from := m.i
+	for from > 0 && !m.chunks[from].start {
+		from--
+	}
+	to := m.i + 1
+	for to < len(m.chunks) && !m.chunks[to].start && m.chunks[to].block == "" {
+		to++
+	}
+	var out []string
+	line, n, at := "", 0, 0
+	for j := from; j < to; j++ {
+		w := m.chunks[j].word
+		wl := utf8.RuneCountInString(w)
+		if n > 0 && n+1+wl > width {
+			out, line, n = append(out, line), "", 0
+		}
+		if n > 0 {
+			line, n = line+" ", n+1
+		}
+		if j == m.i {
+			at = len(out)
+			w = boldStyle.Render(w)
+		} else {
+			w = dimStyle.Render(w)
+		}
+		line, n = line+w, n+wl
+	}
+	out = append(out, line)
+	if len(out) > lines {
+		first := min(max(at-lines/2, 0), len(out)-lines)
+		out = out[first : first+lines]
+	}
+	return out
+}
 
 func (m *Model) View() string {
 	if len(m.chunks) == 0 {
@@ -363,7 +429,16 @@ func (m *Model) View() string {
 		b.WriteString(strings.Repeat(" ", center) + dimStyle.Render("|") + "\n")
 		b.WriteString(strings.Repeat(" ", pad) + string(r[:f]) + focusStyle.Render(string(r[f])) + string(r[f+1:]) + "\n")
 		b.WriteString(strings.Repeat(" ", center) + dimStyle.Render("|") + "\n")
-		b.WriteString(strings.Repeat("\n", max(m.height-top-5, 0)))
+		rest := max(m.height-top-5, 0)
+		if m.paused && rest >= 3 && m.width > 20 {
+			ctx := m.context(m.width-4, min(rest-2, 3))
+			b.WriteString("\n")
+			for _, l := range ctx {
+				b.WriteString("  " + l + "\n")
+			}
+			rest -= len(ctx) + 1
+		}
+		b.WriteString(strings.Repeat("\n", rest))
 	}
 	state := ""
 	switch {
