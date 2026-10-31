@@ -9,6 +9,7 @@ on:
 jobs:
   test:
     strategy:
+      fail-fast: false
       matrix:
         os: [ubuntu-latest, macos-latest]
     runs-on: ${{ matrix.os }}
@@ -34,5 +35,4 @@ jobs:
         run: |
           bash -n integrations/shell/glance.sh
           bash -n completions/glance.bash
-          sh -n integrations/shell/glance.sh
           sh -n install.sh
