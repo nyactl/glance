@@ -1,0 +1,6 @@
+complete -c glance -s w -l wpm -x -a '200 250 300 350 400 450 500 600 700 800' -d 'start at N words a minute'
+complete -c glance -s b -l big -d 'big letters'
+complete -c glance -l fresh -d 'start at the beginning, not where the text was left'
+complete -c glance -s p -l popup -d 'inside tmux, read in a popup'
+complete -c glance -s v -l version -d 'print the version'
+complete -c glance -s h -l help -d 'show the help'

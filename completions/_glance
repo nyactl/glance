@@ -1,0 +1,10 @@
+#compdef glance
+
+_arguments -s \
+  '(-w --wpm)'{-w,--wpm}'[start at N words a minute]:words a minute:(200 250 300 350 400 450 500 600 700 800)' \
+  '(-b --big)'{-b,--big}'[big letters]' \
+  '--fresh[start at the beginning, not where the text was left]' \
+  '(-p --popup)'{-p,--popup}'[inside tmux, read in a popup]' \
+  '(- *)'{-v,--version}'[print the version]' \
+  '(- *)'{-h,--help}'[show the help]' \
+  '1:file:_files'

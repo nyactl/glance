@@ -1,0 +1,88 @@
+.TH GLANCE 1 "2026" "glance" "User Commands"
+.SH NAME
+glance \- terminal speed reader for files and stdin
+.SH SYNOPSIS
+.B glance
+[\fIflags\fR] [\fIFILE\fR | \fB\-\fR]
+.br
+\fICOMMAND\fR |
+.B glance
+[\fIflags\fR]
+.SH DESCRIPTION
+.B glance
+shows a text one word at a time at a fixed spot, with the letter the eye rests on marked, so it
+reads faster than it scrolls. Markdown is read as text: headings, list marks, emphasis and link
+targets are left out. Code blocks and tables are shown whole and wait for space.
+.PP
+Words stay a little longer after a comma or the end of a sentence, and long words longer than
+short ones. A pause shows the sentence around the current word.
+.PP
+When the text comes from a pipe, the keys are read from the terminal, so
+\fBpbpaste | glance\fR stays interactive.
+.SH OPTIONS
+.TP
+.BR \-w ", " \-\-wpm " " \fIN\fR
+Start at \fIN\fR words a minute, from 100 to 1000. Without it, the speed of last time.
+.TP
+.BR \-b ", " \-\-big
+Big letters, drawn with a figlet font. Words the font cannot draw are shown plain.
+.TP
+.B \-\-fresh
+Start at the beginning, not where this text was left.
+.TP
+.BR \-p ", " \-\-popup
+Inside tmux, read in a popup over the current pane. This works without a terminal, as from a tmux
+binding or an editor.
+.TP
+.BR \-v ", " \-\-version
+Print the version.
+.TP
+.BR \-h ", " \-\-help
+Print a short help.
+.PP
+Flags may come before or after the file.
+.SH KEYS
+.TP
+.BR space ", " enter
+Pause and go on. At the end, start over.
+.TP
+.BR h ", " l " (or left, right)"
+A sentence back, a sentence forward. Back first goes to the start of the current sentence.
+.TP
+.BR j ", " k " (or down, up, \-, +)"
+Slower, faster, by 25 words a minute.
+.TP
+.B f
+Big letters on and off.
+.TP
+.BR q ", " esc
+Quit.
+.SH FILES
+.TP
+.I $XDG_STATE_HOME/glance/settings.json
+The speed and the letter size of last time.
+.TP
+.I $XDG_STATE_HOME/glance/positions.json
+Where the last 200 texts were left, by a hash of their content: the same text, from a file or a
+pipe, goes on from there. A text read to its end is forgotten.
+.PP
+.I $XDG_STATE_HOME
+defaults to
+.IR ~/.local/state .
+.SH ENVIRONMENT
+.TP
+.B NO_COLOR
+Set to anything, the focus letter is shown without colour.
+.SH EXAMPLES
+.nf
+glance notes.md
+pbpaste | glance
+git log \-1 \-\-format=%B | glance
+pdftotext paper.pdf \- | glance \-w 450
+w3m \-dump https://example.com | glance
+.fi
+.SH SEE ALSO
+The integrations directory of the source has a tmux configuration, a Vim and Neovim plugin, and
+shell helpers for the clipboard, web pages and PDFs:
+.UR https://github.com/nyactl/glance
+.UE
