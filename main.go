@@ -18,10 +18,13 @@ import (
 	"github.com/nyactl/glance/internal/reader"
 )
 
+var version = "dev"
+
 const usage = `glance shows a text one word at a time: space pause, h/l sentence back and forward,
 j/k slower and faster, f big letters, q quit. Code blocks and tables are shown whole.
 
   glance FILE
+  glance --version
   glance -          the text from stdin, like pbpaste | glance
   COMMAND | glance  the same`
 
@@ -54,6 +57,9 @@ func input(args []string) (string, error) {
 	switch {
 	case len(args) == 1 && (args[0] == "-h" || args[0] == "--help"):
 		fmt.Println(usage)
+		os.Exit(0)
+	case len(args) == 1 && args[0] == "--version":
+		fmt.Println(version)
 		os.Exit(0)
 	case len(args) == 1 && args[0] != "-":
 		b, err := os.ReadFile(args[0])
