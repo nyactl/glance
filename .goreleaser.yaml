@@ -21,9 +21,73 @@ archives:
     files:
       - README.md
       - LICENSE
+      - completions/*
+      - man/*
+      - integrations/**/*
 
 checksum:
   name_template: "checksums.txt"
 
+signs:
+  - cmd: cosign
+    signature: "${artifact}.sigstore.json"
+    args:
+      - sign-blob
+      - "--bundle=${signature}"
+      - "${artifact}"
+      - --yes
+    artifacts: checksum
+
+nfpms:
+  - package_name: glance
+    homepage: "https://github.com/nyactl/glance"
+    maintainer: "nyactl <noreply@github.com>"
+    description: "Terminal speed reader for files and stdin"
+    license: MIT
+    formats:
+      - deb
+      - rpm
+    bindir: /usr/bin
+    contents:
+      - src: man/glance.1
+        dst: /usr/share/man/man1/glance.1
+      - src: completions/glance.bash
+        dst: /usr/share/bash-completion/completions/glance
+      - src: completions/_glance
+        dst: /usr/share/zsh/site-functions/_glance
+      - src: completions/glance.fish
+        dst: /usr/share/fish/vendor_completions.d/glance.fish
+      - src: integrations/
+        dst: /usr/share/glance/integrations/
+
+brews:
+  - name: glance
+    directory: Formula
+    skip_upload: auto
+    repository:
+      owner: nyactl
+      name: homebrew-tap
+      token: "{{ .Env.TAP_GITHUB_TOKEN }}"
+    homepage: "https://github.com/nyactl/glance"
+    description: "Terminal speed reader for files and stdin"
+    license: "MIT"
+    install: |
+      bin.install "glance"
+      man1.install "man/glance.1"
+      bash_completion.install "completions/glance.bash" => "glance"
+      zsh_completion.install "completions/_glance"
+      fish_completion.install "completions/glance.fish"
+      pkgshare.install "integrations"
+    caveats: |
+      tmux bindings, a Vim/Neovim plugin and shell helpers are in
+        #{opt_pkgshare}/integrations
+    test: |
+      assert_match version.to_s, shell_output("#{bin}/glance --version")
+
 changelog:
   sort: asc
+  filters:
+    exclude:
+      - "^docs:"
+      - "^test:"
+      - "^chore:"

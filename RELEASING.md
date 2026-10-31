@@ -1,0 +1,102 @@
+# Releasing
+
+## Semver guidelines
+
+| Bump | When |
+|------|------|
+| **Major** `v1.0.0` | Breaking changes — removed or renamed flags or keys, a changed state file format |
+| **Minor** `v0.x.0` | New flags, keys, integrations or features — fully backward-compatible |
+| **Patch** `v0.1.x` | Bug fixes, performance improvements, dependency updates, documentation |
+
+When in doubt between minor and patch: if a user has to change how they invoke the tool, it's minor. If not, it's patch.
+
+## Pre-release checklist
+
+Run through this before tagging any release:
+
+- [ ] All tests pass — `go test ./...`
+- [ ] Vet clean — `go vet ./...`
+- [ ] Coverage gate passes — `make cover`
+- [ ] GoReleaser dry run succeeds — `goreleaser release --snapshot --clean --skip=publish`
+- [ ] README, man page and completions reflect any new flags or keys
+- [ ] Version bump follows the semver guidelines above
+
+## Stable release
+
+```sh
+git tag v0.x.0
+git push origin v0.x.0
+```
+
+> Release tags (`v*`) are protected against deletion and force-pushes.
+
+GitHub Actions takes it from there:
+1. Tests run — release is blocked if they fail
+2. GoReleaser builds binaries, `.deb`, `.rpm`, and tarballs
+3. GitHub Release is published with all artifacts
+4. Homebrew formula in `nyactl/homebrew-tap` is updated automatically
+5. `CHANGELOG.md` is committed back to `main`
+
+After the release workflow completes, draft and publish prose release notes. GoReleaser's auto-generated changelog is replaced with human-written notes covering only user-facing changes, with usage examples:
+
+```sh
+gh release edit vX.Y.Z --notes "..."
+```
+
+## Verifying release signatures
+
+Every release is signed with [cosign](https://github.com/sigstore/cosign) using keyless signing via [Sigstore](https://sigstore.dev). No private key is involved — the signature is tied to the GitHub Actions workflow identity for the exact tag.
+
+Each release publishes `checksums.txt` (SHA256 hashes of all artifacts) and `checksums.txt.sigstore.json` (the cosign bundle). Verifying both proves the binary was built from source by the release workflow and has not been tampered with.
+
+### Install cosign
+
+```sh
+brew install cosign        # macOS
+# or: https://github.com/sigstore/cosign/releases
+```
+
+### Verify a release
+
+```sh
+VERSION=v0.2.0
+
+# Download the checksum file and its signature bundle
+curl -LO https://github.com/nyactl/glance/releases/download/${VERSION}/checksums.txt
+curl -LO https://github.com/nyactl/glance/releases/download/${VERSION}/checksums.txt.sigstore.json
+
+# Verify the signature — proves it came from the release workflow
+cosign verify-blob \
+  --bundle checksums.txt.sigstore.json \
+  --certificate-identity "https://github.com/nyactl/glance/.github/workflows/release.yml@refs/tags/${VERSION}" \
+  --certificate-oidc-issuer "https://token.actions.githubusercontent.com" \
+  checksums.txt
+
+# Download the binary for your platform
+curl -LO https://github.com/nyactl/glance/releases/download/${VERSION}/glance_${VERSION#v}_darwin_arm64.tar.gz
+
+# Verify the binary matches the signed checksum
+sha256sum --check --ignore-missing checksums.txt
+```
+
+If both commands succeed: the binary is authentic.
+
+## Pre-release / RC
+
+Use an RC tag when shipping significant changes (new features, major refactors) to get early feedback before promoting to stable.
+
+```sh
+git tag v0.2.0-rc.1
+git push origin v0.2.0-rc.1
+```
+
+GoReleaser marks it as a pre-release automatically — it will not be set as "Latest" on GitHub. RC releases go through the same CI pipeline as stable releases but the Homebrew tap is **not** updated for pre-releases. RC entries are also excluded from `CHANGELOG.md`.
+
+To promote to stable once the RC is validated:
+
+```sh
+git tag v0.2.0
+git push origin v0.2.0
+```
+
+Multiple RCs are fine — increment the suffix: `rc.1`, `rc.2`, etc.

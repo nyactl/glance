@@ -8,7 +8,10 @@ on:
 
 jobs:
   test:
-    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
     env:
       FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
     steps:
@@ -23,3 +26,13 @@ jobs:
 
       - name: test
         run: go test -race ./...
+
+      - name: coverage gate
+        run: make cover
+
+      - name: shell integrations parse
+        run: |
+          bash -n integrations/shell/glance.sh
+          bash -n completions/glance.bash
+          sh -n integrations/shell/glance.sh
+          sh -n install.sh
