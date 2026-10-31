@@ -8,6 +8,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"sync"
 	"syscall"
@@ -300,15 +301,16 @@ func TestE2EResumesWhereTheTextWasLeft(t *testing.T) {
 	s.send(" ")
 	s.waitFor("paused")
 	s.send("lll")
-	s.waitFor("N\x1b[1;31me")
+	// "New" is word 22 of 27.
+	s.waitFor("  80%  ")
 	s.quit()
 
 	resumed := startIn(t, s.state, nil, "-w", "100", p)
-	resumed.waitFor("N\x1b[1;31me")
+	resumed.waitFor("  80%  ")
 	resumed.quit()
 
 	fresh := startIn(t, s.state, nil, "-w", "100", "--fresh", p)
-	fresh.waitFor("Gl\x1b[1;31ma")
+	fresh.waitFor("  3%  ")
 	fresh.quit()
 }
 
@@ -320,6 +322,9 @@ func TestE2ENoTextInATerminal(t *testing.T) {
 	}
 }
 
+// colour is a select graphic rendition that sets a foreground colour.
+var colour = regexp.MustCompile(`\x1b\[(?:[0-9;]*;)?(?:3[0-8]|9[0-7])(?:;[0-9;]*)?m`)
+
 func TestE2ENoColor(t *testing.T) {
 	t.Setenv("NO_COLOR", "1")
 	s := start(t, nil, "-w", "100", writeText(t, story))
@@ -329,7 +334,16 @@ func TestE2ENoColor(t *testing.T) {
 	s.quit()
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	if strings.Contains(s.out.String(), "31m") {
+	if colour.MatchString(s.out.String()) {
 		t.Fatal("colour with NO_COLOR set")
+	}
+}
+
+func TestColourPattern(t *testing.T) {
+	for in, want := range map[string]bool{"\x1b[1;31m": true, "\x1b[31m": true, "\x1b[38;5;1m": true, "\x1b[91m": true,
+		"\x1b[2m": false, "\x1b[0m": false, "\x1b[1m": false} {
+		if colour.MatchString(in) != want {
+			t.Errorf("%q: %v", in, !want)
+		}
 	}
 }
